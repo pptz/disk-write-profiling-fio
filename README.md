@@ -53,6 +53,15 @@ This script will:
 - **`bench_runner.sh <ramdir> <diskdir> <nfs_ram> <nfs_disk>`**: Runs the benchmark matrix if you have already manually set up the target directories.
 - **`fio_write_bench.ini`**: The `fio` job configuration file defining the workload (sequential 1M writes, synchronous I/O).
 
+## Benchmark Configuration
+
+The benchmark uses sequential 1MB writes with a single job to measure raw throughput while minimizing latency effects from random seeks. To ensure results represent actual storage performance rather than OS page cache speeds, the configuration employs several strict synchronization flags:
+
+*   **`sync=1` (O_SYNC)**: Forces each write syscall to block until the data is committed to the filesystem. This is particularly critical on macOS, where `O_DIRECT` is not supported on APFS/HFS+ volumes.
+*   **`direct=1`**: Bypasses the page cache on Linux, FreeBSD, and illumos.
+*   **`fsync_on_close=1` and `end_fsync=1`**: Ensures that all writeback is flushed and the full cost of draining the write queue is captured in the recorded time.
+*   **`buffer_pattern=0xdeadbeef`**: Uses a fixed, non-compressible pattern to prevent hardware or filesystem-level compression from inflating throughput numbers.
+
 ## Project Structure
 
 - `run_full_benchmark.sh`: Master setup and teardown script.
