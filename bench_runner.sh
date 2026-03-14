@@ -147,28 +147,25 @@ DISK_NFS=$(awk -F',' '$1=="DISK_NFS" && $2==1000 {print $3}' "$RESULTS_FILE" || 
 echo "Using 1000MB tests for factor analysis:"
 echo
 
+[ -n "$RAM_LOCAL" ]  && echo "RAM local throughput:  $RAM_LOCAL MB/s"
+[ -n "$DISK_LOCAL" ] && echo "Disk local throughput: $DISK_LOCAL MB/s"
+[ -n "$RAM_NFS" ]    && echo "RAM NFS throughput:    $RAM_NFS MB/s"
+[ -n "$DISK_NFS" ]   && echo "Disk NFS throughput:   $DISK_NFS MB/s"
+
+echo
+
 if [ -n "$RAM_LOCAL" ] && [ -n "$DISK_LOCAL" ]; then
     FACTOR=$(awk -v r="$RAM_LOCAL" -v d="$DISK_LOCAL" 'BEGIN {printf "%.2f", r/d}')
-    echo "RAM local throughput:  $RAM_LOCAL MB/s"
-    echo "Disk local throughput: $DISK_LOCAL MB/s"
     echo "Factor: RAM is ${FACTOR}x faster than Local Disk."
 fi
 
-echo
-
 if [ -n "$DISK_LOCAL" ] && [ -n "$DISK_NFS" ]; then
     FACTOR=$(awk -v d="$DISK_LOCAL" -v n="$DISK_NFS" 'BEGIN {printf "%.2f", d/n}')
-    echo "Disk local throughput: $DISK_LOCAL MB/s"
-    echo "Disk NFS throughput:   $DISK_NFS MB/s"
     echo "Factor: Local Disk is ${FACTOR}x faster than NFS."
 fi
 
-echo
-
 if [ -n "$RAM_NFS" ] && [ -n "$DISK_NFS" ]; then
     FACTOR=$(awk -v r="$RAM_NFS" -v d="$DISK_NFS" 'BEGIN {printf "%.2f", r/d}')
-    echo "RAM NFS throughput:    $RAM_NFS MB/s"
-    echo "Disk NFS throughput:   $DISK_NFS MB/s"
     echo "Factor: RAM NFS is ${FACTOR}x faster than Disk NFS."
     echo "Analysis: If this factor is close to 1.0, the NFS protocol is the bottleneck."
     echo "          If this factor is > 2.0, the Disk subsystem is the bottleneck."
