@@ -1,4 +1,4 @@
-# Disk Write Profiling with fio
+# Disk Write Profiling with `fio`
 
 A portable storage benchmarking suite designed to measure and compare write throughput across various storage layers and configurations. This tool is particularly useful for identifying bottlenecks in local disk subsystems versus network-attached storage (NFS).
 
@@ -74,12 +74,14 @@ The benchmark uses sequential 1MB writes with a single job to measure raw throug
 
 *Comparison of performance across different operating systems and hardware.*
 
-| OS    | Hardware                                                       | Local RAM | Local Disk | NFS RAM | NFS Disk | RAM/Disk Local | Disk Local/NFS | RAM/Disk NFS |
-|:------|:---------------------------------------------------------------|:----------|:-----------|:--------|:---------|:---------------|:---------------|:-------------|
-| macOS | MacBook Air (M1, 2020) \| M1 8-core \| 16GB \| Apple SSD 512GB | 6369.74   | 2314.48    | 191.73  | 194.12   | 2.75x          | 11.92x         | 0.99x        |
+| OS                  | Hardware                                                       | Local RAM | Local Disk | NFS RAM | NFS Disk | RAM/Disk Local | Disk Local/NFS | RAM/Disk NFS |
+|:--------------------|:---------------------------------------------------------------|:----------|:-----------|:--------|:---------|:---------------|:---------------|:-------------|
+| macOS Sonoma 14.6.1 | MacBook Air (M1, 2020) \| M1 8-core \| 16GB \| Apple SSD 512GB | 6369.74   | 2314.48    | 191.73* | 194.12   | 2.75x          | 11.92x         | 0.99x        |
+| Debian 13           | Vultr VPS \| 8GB (shared vCPU, cloud block storage)            | 7078.31   | 155.23     | 3541.14 | 145.35   | 45.60x         | 1.07x          | 24.36x       |
 
-*Results are based on 1000MB file writes. All units are in MB/s except for Factors. Exact results will naturally differ from run to run, but have been verified to be consistent.*
+*Results are based on 1000MB file writes. All units are in MB/s except for Factors. Exact results will naturally differ from run to run, but the numbers have been verified to be representative and largely consistent.*
 
+* Results (low) suggest that Mac probably used a physical network interface, not the loopback
 
 ## License
 

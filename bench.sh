@@ -22,7 +22,6 @@ set -e
 TARGET_FILE="$1"
 SIZE_MB="$2"
 
-# Note: the job file uses the .ini extension
 JOBFILE="fio_write_bench.ini"
 
 if [ -z "$TARGET_FILE" ] || [ -z "$SIZE_MB" ]; then
