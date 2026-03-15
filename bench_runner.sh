@@ -55,7 +55,9 @@ run_single_test() {
     # Verification: Ensure the path is actually the type of mount we expect.
     case "$LABEL" in
         *NFS*)
-            if ! mount | grep "$PATHDIR" | grep -iw "nfs" >/dev/null 2>&1; then
+            # Match 'nfs', 'nfs4', 'nfs3' etc. drop -w (whole-word) so
+            # that NFSv4 mounts (type 'nfs4') are not falsely skipped.
+            if ! mount | grep "$PATHDIR" | grep -i "nfs" >/dev/null 2>&1; then
                 echo "Skipping $LABEL : ${SIZE}MB (Path is not an NFS mount: $PATHDIR)"
                 echo "$LABEL ($SIZE MB): Not an NFS mount ($PATHDIR)" >> "$SKIPPED_FILE"
                 return

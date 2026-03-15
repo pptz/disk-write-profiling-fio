@@ -267,9 +267,24 @@ setup_nfs_server() {
 
             sudo mkdir -p "$RAMDIR" "$DISKDIR"
 
-            echo "$RAMDIR *(rw,sync,no_root_squash)" | sudo tee /etc/exports.d/bench_ram.exports
-            echo "$DISKDIR *(rw,sync,no_root_squash)" | sudo tee /etc/exports.d/bench_disk.exports
+            # /etc/exports may not exist on minimal Debian installs
+            # create it if missing so exportfs and sed don't fail.
+            sudo touch /etc/exports
 
+            # Write directly to /etc/exports rather than /etc/exports.d/
+            # because the drop-in directory is not guaranteed to exist on
+            # all distributions (e.g. Debian minimal installs omit it).
+            # Use sed to remove any stale entries first, then append fresh ones,
+            # so re-runs don't accumulate duplicate lines.
+            sudo sed -i "\|$RAMDIR|d"  /etc/exports
+            sudo sed -i "\|$DISKDIR|d" /etc/exports
+            echo "$RAMDIR *(rw,sync,no_root_squash)"  | sudo tee -a /etc/exports
+            echo "$DISKDIR *(rw,sync,no_root_squash)" | sudo tee -a /etc/exports
+
+            # Ensure nfs-kernel-server is running before re-exporting.
+            # Restart rather than start so it picks up the freshly written
+            # /etc/exports a running daemon won't re-read it on 'start'.
+            sudo systemctl restart nfs-kernel-server 2>/dev/null ||                 sudo systemctl restart nfs-server 2>/dev/null || true
             sudo exportfs -ra
             ;;
 
@@ -363,7 +378,11 @@ mount_nfs() {
     case "$OS" in
 
         Linux*)
-            MOUNT_OPTS="rw,noatime"
+            # Specify vers=3 explicitly so the mount type appears as 'nfs'
+            # rather than 'nfs4' in mount output.  Without this the client
+            # negotiates NFSv4 by default, which breaks the NFS mount
+            # detection check in bench_runner.sh.
+            MOUNT_OPTS="rw,noatime,vers=3"
             ;;
 
         FreeBSD*|SunOS*)
@@ -475,8 +494,9 @@ teardown() {
     case "$OS" in
 
         Linux*)
-            sudo truncate -s 0 /etc/exports.d/bench_ram.exports  2>/dev/null || true
-            sudo truncate -s 0 /etc/exports.d/bench_disk.exports 2>/dev/null || true
+            # Remove only the lines this script added; leave other exports intact.
+            sudo sed -i "\|$RAMDIR|d"  /etc/exports 2>/dev/null || true
+            sudo sed -i "\|$DISKDIR|d" /etc/exports 2>/dev/null || true
             sudo exportfs -ra 2>/dev/null || true
             ;;
 
