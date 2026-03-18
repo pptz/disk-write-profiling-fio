@@ -25,17 +25,17 @@ SIZE_MB="$2"
 JOBFILE="fio_write_bench.ini"
 
 if [ -z "$TARGET_FILE" ] || [ -z "$SIZE_MB" ]; then
-    echo "Usage: $0 <target_file> <size_mb>"
+    echo "Usage: $0 <target_file> <size_mb>" >&2
     exit 1
 fi
 
 if ! command -v fio >/dev/null 2>&1; then
-    echo "fio not installed"
+    echo "fio not installed" >&2
     exit 1
 fi
 
 if [ ! -f "$JOBFILE" ]; then
-    echo "Missing job file: $JOBFILE"
+    echo "Missing job file: $JOBFILE" >&2
     exit 1
 fi
 
@@ -56,7 +56,7 @@ if [ "$OS" = "Darwin" ]; then
     trap 'rm -f "$EFFECTIVE_JOBFILE"' EXIT
 fi
 
-RUNS=6
+RUNS=9
 WARMUP=1
 
 RESULTS=()
@@ -84,6 +84,9 @@ for i in $(seq 1 $RUNS); do
     # fio reports KB/s
     MBPS=$(awk -v bw="$BW" 'BEGIN {printf "%.2f", bw/1024}')
 
+    # The first run is often slower due to filesystem metadata allocation,
+    # kernel/VFS cache warmup, NFS connection overhead, and hardware state
+    # state_changes. We discard it to measure steady-state performance.
     if [ "$i" -le "$WARMUP" ]; then
         echo "Warmup run: $MBPS MB/s"
         continue
@@ -98,11 +101,17 @@ done
 echo
 echo "Calculating statistics..."
 
-COUNT=${#RESULTS[@]}
+# Sort results and remove min/max
+# We have 8 measured runs, we want to drop 1 min and 1 max to get 6.
+SORTED_RESULTS=($(printf "%s\n" "${RESULTS[@]}" | sort -n))
+# Drop first (min) and last (max)
+RESULTS_TRIMMED=("${SORTED_RESULTS[@]:1:${#SORTED_RESULTS[@]}-2}")
+
+COUNT=${#RESULTS_TRIMMED[@]}
 
 SUM=0
 
-for v in "${RESULTS[@]}"; do
+for v in "${RESULTS_TRIMMED[@]}"; do
     SUM=$(awk -v a="$SUM" -v b="$v" 'BEGIN{print a+b}')
 done
 
@@ -110,7 +119,7 @@ MEAN=$(awk -v sum="$SUM" -v n="$COUNT" 'BEGIN{printf "%.2f", sum/n}')
 
 VAR=0
 
-for v in "${RESULTS[@]}"; do
+for v in "${RESULTS_TRIMMED[@]}"; do
     DIFF=$(awk -v v="$v" -v m="$MEAN" 'BEGIN{print v-m}')
     SQ=$(awk -v d="$DIFF" 'BEGIN{print d*d}')
     VAR=$(awk -v a="$VAR" -v b="$SQ" 'BEGIN{print a+b}')
@@ -120,7 +129,7 @@ STDDEV=$(awk -v v="$VAR" -v n="$COUNT" 'BEGIN{printf "%.2f", sqrt(v/n)}')
 
 echo
 echo "------------------------------------------------"
-echo "Runs used:        $COUNT"
-echo "Mean throughput:  $MEAN MB/s"
-echo "Stddev:           $STDDEV MB/s"
+echo "Runs used (trimmed): $COUNT"
+echo "Mean throughput:     $MEAN MB/s"
+echo "Stddev:              $STDDEV MB/s"
 echo "------------------------------------------------"

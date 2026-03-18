@@ -74,14 +74,19 @@ The benchmark uses sequential 1MB writes with a single job to measure raw throug
 
 *Comparison of performance across different operating systems and hardware.*
 
+*Results are based on 1000MB file writes. All units are in MB/s except for Factors. Exact results will naturally differ from run to run, but the numbers have been verified to be representative and largely consistent.*
+
 | OS                  | Hardware                                                       | Local RAM | Local Disk | NFS RAM | NFS Disk | RAM/Disk Local | Disk Local/NFS | RAM/Disk NFS |
 |:--------------------|:---------------------------------------------------------------|:----------|:-----------|:--------|:---------|:---------------|:---------------|:-------------|
 | macOS Sonoma 14.6.1 | MacBook Air (M1, 2020) \| M1 8-core \| 16GB \| Apple SSD 512GB | 6369.74   | 2314.48    | 191.73* | 194.12   | 2.75x          | 11.92x         | 0.99x        |
 | Debian 13           | Vultr VPS \| 8GB (shared vCPU, cloud block storage)            | 7078.31   | 155.23     | 3541.14 | 145.35   | 45.60x         | 1.07x          | 24.36x       |
 
-*Results are based on 1000MB file writes. All units are in MB/s except for Factors. Exact results will naturally differ from run to run, but the numbers have been verified to be representative and largely consistent.*
+\* Results (low) suggest that Mac probably used a physical network interface, not the loopback
 
-* Results (low) suggest that Mac probably used a physical network interface, not the loopback
+### Other
+- The first run of every (10/100/1000MB) write is significantly slower than subsequent runs due to filesystem overhead
+- Writing 10MB to local RAM shows practically 0 STD. We assume this write is a CPU-only operation, not involving any physical memory. L2/L3 CPU cache is likely larger than 10MB.
+- Throughput consistently incereases with the amount of data transferred, suggesting that a set-up penalty is incurred.
 
 ## License
 
