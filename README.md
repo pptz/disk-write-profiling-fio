@@ -14,10 +14,10 @@ By comparing these results, the suite calculates performance factors to help det
 
 ## Supported Operating Systems
 
-- **macOS** (Darwin / Apple Silicon)
-- **Linux** (various distributions)
-- **FreeBSD**
-- **OmniOS / illumos** (SunOS)
+- **macOS** (Darwin / Apple Silicon): tested on Sonoma 14.6.1
+- **Linux** (various distributions): tested on Debian 13
+- **FreeBSD**: not tested yet
+- **OmniOS / illumos** (SunOS): not tested yet
 
 ## Prerequisites
 
