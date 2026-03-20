@@ -1,6 +1,6 @@
 # Disk Write Profiling with `fio`
 
-A portable storage benchmarking suite designed to measure and compare write throughput across various storage layers and configurations. This tool is particularly useful for identifying bottlenecks in local disk subsystems versus network-attached storage (NFS).
+A portable storage benchmarking suite designed to measure and compare write throughput across various storage layers and configurations. This tool is particularly useful for identifying bottlenecks in local disk subsystems versus network-attached storage (NFS). The workloads under test are sequential (not random).
 
 ## Overview
 
