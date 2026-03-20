@@ -17,6 +17,8 @@
 
 set -euo pipefail
 
+WORKLOAD="${1:-SEQ}"
+
 OS=$(uname -s)
 
 can_sudo() {
@@ -434,10 +436,10 @@ mount_nfs() {
 run_benchmarks() {
 
     echo
-    echo "Starting benchmark suite..."
+    echo "Starting benchmark suite ($WORKLOAD)..."
     echo
 
-    ./bench_runner.sh "$RAMDIR" "$DISKDIR" "$NFS_RAM_MNT" "$NFS_DISK_MNT"
+    ./bench_runner.sh "$RAMDIR" "$DISKDIR" "$NFS_RAM_MNT" "$NFS_DISK_MNT" "$WORKLOAD"
 }
 
 # ------------------------------------------------

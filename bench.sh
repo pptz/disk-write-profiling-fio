@@ -20,12 +20,17 @@
 set -e
 
 TARGET_FILE="$1"
-SIZE_MB="$2"
+SIZE_STR="$2"
+WORKLOAD="${3:-SEQ}"
 
-JOBFILE="fio_write_bench.ini"
+if [ "$WORKLOAD" = "RAND" ]; then
+    JOBFILE="fio_random_bench.ini"
+else
+    JOBFILE="fio_sequential_bench.ini"
+fi
 
-if [ -z "$TARGET_FILE" ] || [ -z "$SIZE_MB" ]; then
-    echo "Usage: $0 <target_file> <size_mb>" >&2
+if [ -z "$TARGET_FILE" ] || [ -z "$SIZE_STR" ]; then
+    echo "Usage: $0 <target_file> <size> [SEQ|RAND]" >&2
     exit 1
 fi
 
@@ -59,9 +64,14 @@ fi
 RUNS=9
 WARMUP=1
 
+# For large 1000MB tests, reduce the number of runs to save time
+if [ "$SIZE_STR" = "1000M" ]; then
+    RUNS=6
+fi
+
 RESULTS=()
 
-echo "Benchmarking $TARGET_FILE (${SIZE_MB}MB)"
+echo "Benchmarking $TARGET_FILE ($SIZE_STR)"
 echo
 
 for i in $(seq 1 $RUNS); do
@@ -72,7 +82,7 @@ for i in $(seq 1 $RUNS); do
 
     JSON=$(fio "$EFFECTIVE_JOBFILE" \
         --filename="$TARGET_FILE" \
-        --size="${SIZE_MB}M" \
+        --size="$SIZE_STR" \
         --output-format=json)
 
     # Extract write bandwidth from fio's JSON using jq.
@@ -95,6 +105,7 @@ for i in $(seq 1 $RUNS); do
     echo "Measured: $MBPS MB/s"
 
     RESULTS+=("$MBPS")
+
 
 done
 
