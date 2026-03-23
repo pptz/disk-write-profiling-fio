@@ -90,8 +90,13 @@ run_single_test() {
 
     printf "Running %-12s [%4s] : %s... " "$LABEL" "$WORKLOAD" "$SIZE"
 
-    OUTPUT=$(./bench.sh "$FILE" "$SIZE" "$WORKLOAD")
-    rm -f "$FILE"
+    OUTFILE="${TMPDIR:-/tmp}/bench_run.$$"
+    ./bench.sh "$FILE" "$SIZE" "$WORKLOAD" > "$OUTFILE"
+
+    THROUGHPUT=$(awk '/Mean throughput:/ {print $3}' "$OUTFILE")
+    STDDEV=$(awk '/Stddev:/ {print $2}' "$OUTFILE")
+
+    rm -f "$OUTFILE"
 
     # Parse throughput and stddev from bench.sh output
     THROUGHPUT=$(echo "$OUTPUT" | awk '/Mean throughput:/ {print $3}')
