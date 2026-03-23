@@ -88,27 +88,31 @@ run_single_test() {
 
     FILE="$PATHDIR/test_${SIZE}.dat"
 
-    printf "Running %-12s [%4s] : %s... " "$LABEL" "$WORKLOAD" "$SIZE"
+printf "Running %-12s [%4s] : %s... " "$LABEL" "$WORKLOAD" "$SIZE"
 
-    OUTFILE="${TMPDIR:-/tmp}/bench_run.$$"
-    ./bench.sh "$FILE" "$SIZE" "$WORKLOAD" > "$OUTFILE"
+OUTFILE="${TMPDIR:-/tmp}/bench_run.$$"
+# Run bench.sh and capture stdout/stderr
+./bench.sh "$FILE" "$SIZE" "$WORKLOAD" > "$OUTFILE" 2>&1
 
-    THROUGHPUT=$(awk '/Mean throughput:/ {print $3}' "$OUTFILE")
-    STDDEV=$(awk '/Stddev:/ {print $2}' "$OUTFILE")
+# Debug: show last 20 lines of output
+echo "DEBUG: bench.sh output (last 20 lines):"
+tail -n 20 "$OUTFILE"
 
-    rm -f "$OUTFILE"
+# Parse throughput and stddev
+THROUGHPUT=$(awk '/Mean throughput:/ {print $3}' "$OUTFILE")
+STDDEV=$(awk '/Stddev:/ {print $2}' "$OUTFILE")
 
-    # Parse throughput and stddev from bench.sh output
-    THROUGHPUT=$(echo "$OUTPUT" | awk '/Mean throughput:/ {print $3}')
-    STDDEV=$(echo "$OUTPUT" | awk '/Stddev:/ {print $2}')
+# Remove the temporary output file
+rm -f "$OUTFILE"
 
-    if [ -z "$THROUGHPUT" ]; then
-        echo "Failed!"
-        exit 1
-    fi
+# Check results
+if [ -z "$THROUGHPUT" ]; then
+    echo "ERROR: Failed to parse throughput from bench.sh output!"
+    exit 1
+fi
 
-    printf "Result: %8s MB/s (± %s MB/s)\n" "$THROUGHPUT" "$STDDEV"
-    printf "%s,%s,%s,%s,%s\n" "$LABEL" "$WORKLOAD" "$SIZE" "$THROUGHPUT" "$STDDEV" >> "$RESULTS_FILE"
+printf "Result: %8s MB/s (± %s MB/s)\n" "$THROUGHPUT" "$STDDEV"
+printf "%s,%s,%s,%s,%s\n" "$LABEL" "$WORKLOAD" "$SIZE" "$THROUGHPUT" "$STDDEV" >> "$RESULTS_FILE"
 }
 
 # ------------------------------------------------
