@@ -130,3 +130,8 @@ echo "Runs used (trimmed): $COUNT"
 echo "Mean throughput:     $MEAN MB/s"
 echo "Stddev:              $STDDEV MB/s"
 echo "------------------------------------------------"
+echo
+
+# Ensure bench_runner.sh can parse it
+echo "Mean throughput: $MEAN MB/s"
+echo "Stddev: $STDDEV MB/s"
