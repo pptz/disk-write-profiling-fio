@@ -80,16 +80,17 @@ for i in $(seq 1 $RUNS); do
 
     echo "Run $i / $RUNS"
 
-    JSON=$(fio "$EFFECTIVE_JOBFILE" \
+    OUTFILE="${TMPDIR:-/tmp}/fio_out.$$.$i.json"
+
+    fio "$EFFECTIVE_JOBFILE" \
         --filename="$TARGET_FILE" \
         --size="$SIZE_STR" \
-        --output-format=json)
+        --output-format=json \
+        --output="$OUTFILE" \
+        --eta=never
 
-    # Extract write bandwidth from fio's JSON using jq.
-    # The naive awk approach ('/"bw"/') matches the read.bw field first,
-    # which is always 0 in a write-only job, producing 0.00 MB/s for every
-    # run.  jq navigates directly to jobs[0].write.bw, which is in KB/s.
-    BW=$(echo "$JSON" | jq '[.jobs[0].write.bw] | .[0]')
+    BW=$(jq '.jobs[0].write.bw' "$OUTFILE")
+    rm -f "$OUTFILE"
 
     # fio reports KB/s
     MBPS=$(awk -v bw="$BW" 'BEGIN {printf "%.2f", bw/1024}')
