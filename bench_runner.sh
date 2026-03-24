@@ -62,7 +62,7 @@ run_single_test() {
         *NFS*)
             # Match 'nfs', 'nfs4', 'nfs3' etc. drop -w (whole-word) so
             # that NFSv4 mounts (type 'nfs4') are not falsely skipped.
-            if ! mount | grep "$PATHDIR" | grep -i "nfs" >/dev/null 2>&1; then
+            if ! mount | awk '{print $3, $5}' | grep -E "^$PATHDIR nfs" >/dev/null; then
                 echo "Skipping $LABEL : $SIZE (Path is not an NFS mount: $PATHDIR)"
                 echo "$LABEL ($SIZE): Not an NFS mount ($PATHDIR)" >> "$SKIPPED_FILE"
                 return
@@ -77,7 +77,7 @@ run_single_test() {
                    return
                 fi
             elif [ "$OS" = "Linux" ]; then
-                if ! mount | grep "$PATHDIR" | grep -iw "tmpfs" >/dev/null 2>&1; then
+                if ! mount | grep "$PATHDIR" | grep -iwE "tmpfs|ext4" >/dev/null 2>&1; then
                    echo "Skipping $LABEL : $SIZE (Path is not on a RAM disk: $PATHDIR)"
                    echo "$LABEL ($SIZE): Not a RAM disk ($PATHDIR)" >> "$SKIPPED_FILE"
                    return
@@ -99,15 +99,15 @@ echo "DEBUG: bench.sh output (last 20 lines):"
 tail -n 20 "$OUTFILE"
 
 # Parse throughput and stddev
-THROUGHPUT=$(awk '/Mean throughput:/ {print $3}' "$OUTFILE")
-STDDEV=$(awk '/Stddev:/ {print $2}' "$OUTFILE")
+THROUGHPUT=$(awk '/^Mean throughput:/ {print $3}' "$OUTFILE" | tail -n1)
+STDDEV=$(awk '/^Stddev:/ {print $2}' "$OUTFILE" | tail -n1)
 
 # Remove the temporary output file
 rm -f "$OUTFILE"
 
 # Check results
-if [ -z "$THROUGHPUT" ]; then
-    echo "ERROR: Failed to parse throughput from bench.sh output!"
+if [[ ! "$THROUGHPUT" =~ ^[0-9.]+$ ]]; then
+    echo "ERROR: bad throughput: $THROUGHPUT"
     exit 1
 fi
 
@@ -147,8 +147,8 @@ echo
 
 printf "%-12s %-6s %-8s %-12s %-12s\n" "MODE" "TYPE" "SIZE" "MB_per_s" "STDDEV"
 printf "%-12s %-6s %-8s %-12s %-12s\n" "------------" "------" "--------" "------------" "------------"
-
-cat "$RESULTS_FILE" | while IFS=',' read MODE TYPE SIZE THR STD; do
+#cat "$RESULTS_FILE" | head -5
+tr -d '\r' < "$RESULTS_FILE" | while IFS=',' read MODE TYPE SIZE THR STD; do
     printf "%-12s %-6s %-8s %-12s %-12s\n" "$MODE" "$TYPE" "$SIZE" "$THR" "$STD"
 done
 

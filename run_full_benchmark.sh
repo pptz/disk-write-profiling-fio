@@ -136,8 +136,11 @@ setup_ramdisk() {
 
         Linux*)
             mkdir -p "$RAMDIR"
-            mountpoint -q "$RAMDIR" || \
-                as_root mount -t tmpfs -o size=2G tmpfs "$RAMDIR"
+            if ! mountpoint -q "$RAMDIR"; then
+                as_root modprobe brd rd_nr=1 rd_size=2097152
+                as_root mkfs.ext4 /dev/ram0
+                as_root mount /dev/ram0 "$RAMDIR"
+            fi
             ;;
 
         FreeBSD*)
@@ -165,6 +168,7 @@ setup_ramdisk() {
                 RAW=$(echo "$DEV" | sed 's|/dev/disk|/dev/rdisk|')
                 as_root newfs_hfs "$RAW"
                 as_root mount -t hfs "$DEV" "$RAMDIR"
+                echo "Mounted ramdisk $DEV on $RAMDIR"
             fi
             ;;
     esac
@@ -205,14 +209,24 @@ setup_nfs_server() {
 
         Darwin*)
             as_root mkdir -p "$RAMDIR" "$DISKDIR"
-            REAL_RAMDIR=$(realpath "$RAMDIR")
-            REAL_DISKDIR=$(realpath "$DISKDIR")
+            REAL_RAMDIR=$(cd "$RAMDIR" && pwd)
+            REAL_DISKDIR=$(cd "$DISKDIR" && pwd)
+            as_root sed -i '' "\|$REAL_RAMDIR|d" /etc/exports
+            as_root sed -i '' "\|$REAL_DISKDIR|d" /etc/exports
 
             echo "$REAL_RAMDIR -maproot=0 -alldirs -network 127.0.0.0 -mask 255.0.0.0" | as_root tee -a /etc/exports >/dev/null
             echo "$REAL_DISKDIR -maproot=0 -alldirs -network 127.0.0.0 -mask 255.0.0.0" | as_root tee -a /etc/exports >/dev/null
 
-            as_root nfsd enable
-            as_root nfsd restart
+            as_root nfsd enable || true
+            # Reload exports without kickstart
+            as_root nfsd update || true
+
+            # Fallback: start if not running
+            if ! pgrep -x nfsd >/dev/null; then
+                as_root nfsd start || true
+            fi
+            sleep 1 # give nfsd some time
+
             ;;
     esac
 }
@@ -272,6 +286,7 @@ teardown() {
     esac
 
     as_root umount "$RAMDIR" 2>/dev/null || true
+    as_root rmmod brd 2>/dev/null || true
     as_root rm -rf "$BASE"
 
     echo "Teardown complete."

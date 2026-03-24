@@ -72,7 +72,7 @@ echo
 
 for i in $(seq 1 $RUNS); do
     rm -f "$TARGET_FILE"
-    echo "Run $i / $RUNS"
+    #echo "Run $i / $RUNS"
 
     # Use a temporary file for JSON output to avoid stdout blocking over SSH
     OUTFILE="${TMPDIR:-/tmp}/fio_out.$$.$i.json"
@@ -88,11 +88,11 @@ for i in $(seq 1 $RUNS); do
     MBPS=$(awk -v bw="$BW" 'BEGIN {printf "%.2f", bw/1024}')
 
     if [ "$i" -le "$WARMUP" ]; then
-        echo "Warmup run: $MBPS MB/s"
+        #echo "Warmup run: $MBPS MB/s"
         continue
     fi
 
-    echo "Measured: $MBPS MB/s"
+    #echo "Measured: $MBPS MB/s"
     RESULTS+=("$MBPS")
 
     rm -f "$OUTFILE"
@@ -124,13 +124,13 @@ done
 
 STDDEV=$(awk -v v="$VAR" -v n="$COUNT" 'BEGIN{printf "%.2f", sqrt(v/n)}')
 
-echo
-echo "------------------------------------------------"
-echo "Runs used (trimmed): $COUNT"
-echo "Mean throughput:     $MEAN MB/s"
-echo "Stddev:              $STDDEV MB/s"
-echo "------------------------------------------------"
-echo
+#echo
+#echo "------------------------------------------------"
+#echo "Runs used (trimmed): $COUNT"
+#echo "Mean throughput:     $MEAN MB/s"
+#echo "Stddev:              $STDDEV MB/s"
+#echo "------------------------------------------------"
+#echo
 
 # Ensure bench_runner.sh can parse it
 echo "Mean throughput: $MEAN MB/s"
