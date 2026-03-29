@@ -3,18 +3,7 @@
 # ===============================================================
 # bench.sh
 #
-# Portable fio/dd benchmark runner (SSH-friendly)
-# Works on:
-#   Linux
-#   FreeBSD
-#   OmniOS / illumos
-#   macOS (Darwin / Apple Silicon)
-#
-# Usage:
-#   ./bench.sh <target_file> <size_mb> [SEQ|RAND] [fio|dd]
-#
-# Example:
-#   ./bench.sh /tmp/testfile 100 SEQ dd
+# Portable fio/dd benchmark runner
 # ===============================================================
 
 set -e
@@ -23,115 +12,123 @@ TARGET_FILE="$1"
 SIZE_STR="$2"
 WORKLOAD="${3:-SEQ}"
 TOOL="${4:-fio}"
+MODE="${5:-WRITE}" # WRITE or READ
+TEST_MODE="${6:-}"
 OS=$(uname -s)
 
 if [ -z "$TARGET_FILE" ] || [ -z "$SIZE_STR" ]; then
-    echo "Usage: $0 <target_file> <size> [SEQ|RAND] [fio|dd]" >&2
+    echo "Usage: $0 <target_file> <size> [SEQ|RAND] [fio|dd] [WRITE|READ] [test]" >&2
     exit 1
 fi
 
-if [ "$TOOL" = "fio" ]; then
-    if ! command -v fio >/dev/null 2>&1; then
-        echo "fio not installed" >&2
-        exit 1
+# Portable lowercase for MODE
+MODE_LOWER=$(echo "$MODE" | tr '[:upper:]' '[:lower:]')
+
+# ------------------------------------------------
+# purge_cache (Internal)
+# ------------------------------------------------
+purge_cache() {
+    if [ "$OS" = "Darwin" ]; then
+        sync
+        if ! purge 2>/dev/null; then
+            sudo purge 2>/dev/null || echo "WARNING: purge failed — read results may reflect cache" >&2
+        fi
+    elif [ "$OS" = "Linux" ]; then
+        sync && echo 3 > /proc/sys/vm/drop_caches 2>/dev/null || true
     fi
-fi
-
-# Select job file
-if [ "$WORKLOAD" = "RAND" ]; then
-    JOBFILE="fio_random_bench.ini"
-else
-    JOBFILE="fio_sequential_bench.ini"
-fi
-
-if [ ! -f "$JOBFILE" ]; then
-    echo "Missing job file: $JOBFILE" >&2
-    exit 1
-fi
-
-# ---------------------------------------------------------------
-# Darwin / macOS: APFS does not support O_DIRECT, so direct=1
-# from the job file would cause fio to abort.
-# ---------------------------------------------------------------
-EFFECTIVE_JOBFILE="$JOBFILE"
-if [ "$OS" = "Darwin" ]; then
-    EFFECTIVE_JOBFILE="${TMPDIR:-/tmp}/fio_write_bench_darwin.$$.ini"
-    sed 's/^direct=1/direct=0/' "$JOBFILE" > "$EFFECTIVE_JOBFILE"
-    trap 'rm -f "$EFFECTIVE_JOBFILE"' EXIT
-fi
+}
 
 RUNS=9
 WARMUP=1
 
-# Reduce runs for 1000M tests to save time
-if [ "$SIZE_STR" = "1000M" ]; then
+if [ "$TEST_MODE" = "test" ]; then
+    RUNS=2
+    WARMUP=1
+elif [ "$SIZE_STR" = "1000M" ]; then
     RUNS=6
 fi
 
 RESULTS=()
 
-echo "Benchmarking $TARGET_FILE ($SIZE_STR, $WORKLOAD) using $TOOL"
-echo
+# Parse SIZE_STR to COUNT (assuming bs=1M)
+SIZE_VAL=$(grep -oE '^[0-9]+' <<< "$SIZE_STR")
+SIZE_UNIT=$(grep -oE '[MG]' <<< "$SIZE_STR")
+if [ "$SIZE_UNIT" = "G" ]; then
+    COUNT=$((SIZE_VAL * 1024))
+else
+    COUNT=$SIZE_VAL
+fi
 
 for i in $(seq 1 $RUNS); do
-    rm -f "$TARGET_FILE"
-    #echo "Run $i / $RUNS"
+    
+    if [ "$MODE" = "WRITE" ]; then
+        rm -f "$TARGET_FILE"
+    else
+        purge_cache
+    fi
 
     if [ "$TOOL" = "fio" ]; then
-        # Use a temporary file for JSON output to avoid stdout blocking over SSH
         OUTFILE="${TMPDIR:-/tmp}/fio_out.$$.$i.json"
+        
+        # Determine FIO_RW
+        if [ "$MODE" = "WRITE" ]; then
+            [ "$WORKLOAD" = "SEQ" ] && FIO_RW="write" || FIO_RW="randwrite"
+            DIRECT=1
+            SYNC=1
+        else
+            [ "$WORKLOAD" = "SEQ" ] && FIO_RW="read" || FIO_RW="randread"
+            DIRECT=1
+            SYNC=0 # sync=1 is for writes (O_SYNC)
+        fi
 
-        fio "$EFFECTIVE_JOBFILE" \
+        # Darwin override for direct=1
+        [ "$OS" = "Darwin" ] && DIRECT=0
+
+        fio --name=bench_job \
             --filename="$TARGET_FILE" \
             --size="$SIZE_STR" \
+            --bs=1M \
+            --rw="$FIO_RW" \
+            --direct="$DIRECT" \
+            --sync="$SYNC" \
+            --ioengine=sync \
+            --buffer_pattern=0xdeadbeef \
             --output-format=json \
-            --output="$OUTFILE"
+            --output="$OUTFILE" \
+            --overwrite=1 \
+            --group_reporting=1
 
-        # Extract write bandwidth from JSON (in KB/s)
-        BW=$(jq '.jobs[0].write.bw' "$OUTFILE")
+        # Extract BW.
+        BW=$(jq -r ".jobs[0].${MODE_LOWER}.bw" "$OUTFILE" 2>/dev/null || echo 0)
         MBPS=$(awk -v bw="$BW" 'BEGIN {printf "%.2f", bw/1024}')
         rm -f "$OUTFILE"
     else
         # dd implementation
-        # Parse SIZE_STR to COUNT (assuming bs=1M)
-        SIZE_VAL=$(grep -oE '^[0-9]+' <<< "$SIZE_STR")
-        SIZE_UNIT=$(grep -oE '[MG]' <<< "$SIZE_STR")
-        if [ "$SIZE_UNIT" = "G" ]; then
-            COUNT=$((SIZE_VAL * 1024))
-        else
-            COUNT=$SIZE_VAL
-        fi
-
-        # We'll use a loop to match fio's sync=1 (O_SYNC) behavior, 
-        # as many dd versions don't support oflag=dsync.
-        
         T_START=$(perl -MTime::HiRes=time -e 'print time' 2>/dev/null || date +%s)
         
-        # Pre-create file to avoid truncation issues in loop
-        touch "$TARGET_FILE"
-
-        for (( j=0; j<COUNT; j++ )); do
-            if [ "$WORKLOAD" = "RAND" ]; then
-                OFFSET=$(( RANDOM % COUNT ))
+        if [ "$MODE" = "WRITE" ]; then
+            if [ "$WORKLOAD" = "SEQ" ]; then
+                dd if=/dev/zero of="$TARGET_FILE" bs=1M count=$COUNT conv=fsync status=none 2>/dev/null
             else
-                OFFSET=$j
+                touch "$TARGET_FILE"
+                for (( j=0; j<COUNT; j++ )); do
+                    OFFSET=$(( RANDOM % COUNT ))
+                    dd if=/dev/zero of="$TARGET_FILE" bs=1M count=1 seek=$OFFSET conv=notrunc status=none 2>/dev/null
+                done
+                dd if=/dev/null of="$TARGET_FILE" conv=notrunc,fsync status=none 2>/dev/null
             fi
-            
-            if [ "$OS" = "Linux" ]; then
-                # On Linux we can try to use oflag=direct,dsync if supported, 
-                # but for consistency with Darwin we'll use a loop-based approach 
-                # or just use the tool flags if available.
-                # Here we stick to a simple loop with fsync to ensure we match fio.
-                dd if=/dev/zero of="$TARGET_FILE" bs=1M count=1 seek=$OFFSET conv=notrunc,fdatasync status=none 2>/dev/null
+        else
+            if [ "$WORKLOAD" = "SEQ" ]; then
+                dd if="$TARGET_FILE" of=/dev/null bs=1M count=$COUNT status=none 2>/dev/null
             else
-                # Darwin/BSD
-                dd if=/dev/zero of="$TARGET_FILE" bs=1M count=1 seek=$OFFSET conv=notrunc,fsync status=none 2>/dev/null
+                for (( j=0; j<COUNT; j++ )); do
+                    OFFSET=$(( RANDOM % COUNT ))
+                    dd if="$TARGET_FILE" of=/dev/null bs=1M count=1 skip=$OFFSET status=none 2>/dev/null
+                done
             fi
-        done
+        fi
 
         T_END=$(perl -MTime::HiRes=time -e 'print time' 2>/dev/null || date +%s)
-        
-        # Calculate MBPS
         DURATION=$(awk -v start="$T_START" -v end="$T_END" 'BEGIN {print end - start}')
         if (( $(awk -v d="$DURATION" 'BEGIN {print (d > 0.001)}') )); then
             MBPS=$(awk -v size="$COUNT" -v duration="$DURATION" 'BEGIN {printf "%.2f", size/duration}')
@@ -141,40 +138,18 @@ for i in $(seq 1 $RUNS); do
     fi
 
     if [ "$i" -le "$WARMUP" ]; then
-        #echo "Warmup run: $MBPS MB/s"
         continue
     fi
-
-    #echo "Measured: $MBPS MB/s"
     RESULTS+=("$MBPS")
 done
 
-rm -f "$TARGET_FILE"
+# Portable Trimmed Statistics
+SORTED_RESULTS=$(printf "%s\n" "${RESULTS[@]}" | sort -n)
+if [ "$TEST_MODE" = "test" ]; then
+    TRIMMED="$SORTED_RESULTS"
+else
+    TRIMMED=$(echo "$SORTED_RESULTS" | sed '1d;$d')
+fi
 
-echo
-echo "Calculating statistics..."
-
-# Trim min and max
-SORTED_RESULTS=($(printf "%s\n" "${RESULTS[@]}" | sort -n))
-RESULTS_TRIMMED=("${SORTED_RESULTS[@]:1:${#SORTED_RESULTS[@]}-2}")
-
-COUNT_RES=${#RESULTS_TRIMMED[@]}
-SUM=0
-for v in "${RESULTS_TRIMMED[@]}"; do
-    SUM=$(awk -v a="$SUM" -v b="$v" 'BEGIN{print a+b}')
-done
-
-MEAN=$(awk -v sum="$SUM" -v n="$COUNT_RES" 'BEGIN{printf "%.2f", sum/n}')
-
-VAR=0
-for v in "${RESULTS_TRIMMED[@]}"; do
-    DIFF=$(awk -v v="$v" -v m="$MEAN" 'BEGIN{print v-m}')
-    SQ=$(awk -v d="$DIFF" 'BEGIN{print d*d}')
-    VAR=$(awk -v a="$VAR" -v b="$SQ" 'BEGIN{print a+b}')
-done
-
-STDDEV=$(awk -v v="$VAR" -v n="$COUNT_RES" 'BEGIN{printf "%.2f", sqrt(v/n)}')
-
-# Ensure bench_runner.sh can parse it
-echo "Mean throughput: $MEAN MB/s"
-echo "Stddev: $STDDEV MB/s"
+echo "Mean throughput: $(echo "$TRIMMED" | awk '{sum+=$1; n++} END {if (n>0) printf "%.2f", sum/n; else print "0.00"}') MB/s"
+echo "Stddev: $(echo "$TRIMMED" | awk '{sum+=$1; sumsq+=$1*$1; n++} END {if (n>1) printf "%.2f", sqrt((sumsq - (sum*sum)/n)/(n-1)); else print "0.00"}') MB/s"

@@ -1,19 +1,14 @@
 #!/usr/bin/env bash
 
 # ================================================================
-# run_full_benchmark.sh (refactored)
-#
-# Key improvements:
-#   - Centralized privilege handling (no raw sudo calls)
-#   - Works cleanly as root or non-root
-#   - No dependency on sudo when already root
-#   - Safer argument handling under set -u
+# run_full_benchmark.sh
 # ================================================================
 
 set -euo pipefail
 
 WORKLOAD="${1:-SEQ}"
 TOOL="${2:-fio}"
+TEST_MODE="${3:-}"
 OS=$(uname -s)
 
 # ------------------------------------------------
@@ -216,22 +211,19 @@ setup_nfs_server() {
             as_root mkdir -p "$RAMDIR" "$DISKDIR"
             REAL_RAMDIR=$(cd "$RAMDIR" && pwd)
             REAL_DISKDIR=$(cd "$DISKDIR" && pwd)
-            as_root sed -i '' "\|$REAL_RAMDIR|d" /etc/exports
-            as_root sed -i '' "\|$REAL_DISKDIR|d" /etc/exports
+            
+            # Use a more robust sed pattern and ensure we are cleaning up
+            as_root sed -i '' "\|$REAL_RAMDIR|d" /etc/exports 2>/dev/null || true
+            as_root sed -i '' "\|$REAL_DISKDIR|d" /etc/exports 2>/dev/null || true
 
             echo "$REAL_RAMDIR -maproot=0 -alldirs -network 127.0.0.0 -mask 255.0.0.0" | as_root tee -a /etc/exports >/dev/null
             echo "$REAL_DISKDIR -maproot=0 -alldirs -network 127.0.0.0 -mask 255.0.0.0" | as_root tee -a /etc/exports >/dev/null
 
             as_root nfsd enable || true
-            # Reload exports without kickstart
             as_root nfsd update || true
-
-            # Fallback: start if not running
-            if ! pgrep -x nfsd >/dev/null; then
-                as_root nfsd start || true
-            fi
-            sleep 1 # give nfsd some time
-
+            
+            # Give nfsd time to digest the new exports
+            sleep 2
             ;;
     esac
 }
@@ -267,8 +259,10 @@ mount_nfs() {
 # ------------------------------------------------
 
 run_benchmarks() {
-    echo "Starting benchmark suite ($WORKLOAD) using $TOOL..."
-    ./bench_runner.sh "$RAMDIR" "$DISKDIR" "$NFS_RAM_MNT" "$NFS_DISK_MNT" "$WORKLOAD" "$TOOL"
+    # Ensure TEST_MODE is defined for the label printing
+    LBL="${TEST_MODE:-Standard}"
+    echo "Starting benchmark suite ($WORKLOAD) using $TOOL (Mode: $LBL)..."
+    ./bench_runner.sh "$RAMDIR" "$DISKDIR" "$NFS_RAM_MNT" "$NFS_DISK_MNT" "$WORKLOAD" "$TOOL" "$TEST_MODE"
 }
 
 # ------------------------------------------------
@@ -290,7 +284,6 @@ teardown() {
             ;;
         Darwin*)
             # Clean up /etc/exports
-            # Use paths that were actually used
             as_root sed -i '' "\|$RAMDIR|d" /etc/exports 2>/dev/null || true
             as_root sed -i '' "\|$DISKDIR|d" /etc/exports 2>/dev/null || true
             as_root nfsd update || true
