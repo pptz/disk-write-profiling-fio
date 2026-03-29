@@ -77,9 +77,10 @@ Every test point is measured multiple times (unless `test` mode is used):
 
 ## Benchmarked Results
 
-| Machine                    | OS                 | RAM Local (W/R) [MB/s]     | Disk Local (W/R) [MB/s]    | RAM NFS (W/R) [MB/s]       | Disk NFS (W/R) [MB/s]      |
-| :------------------------- | :----------------: | :------------------------: | :------------------------: | :------------------------: | :------------------------: |
-| MacBook Air M1             | Darwin (23.6.0)    |        4056 / 4004         |        1060 / 3115         |         861 / 357          |         494 / 198          |
+| Machine                    | OS                              | RAM Local (W/R) [MB/s] | Disk Local (W/R) [MB/s] | RAM NFS (W/R) [MB/s] | Disk NFS (W/R) [MB/s] |
+| :------------------------- | :-----------------------------: | :--------------------: | :---------------------: | :------------------: | :-------------------: |
+| MacBook Air M1             | Darwin (23.6.0)                 |     5220 / 5951        |      1225 / 2935        |      929 / 355       |       563 / 218       |
+| Dell (i5-11300H) (VM)      | Linux (6.12.74+deb13+1-amd64)   |     1647 / 3273        |      1926 / 3129        |      815 / 1428      |       697 / 1218      |
 
 ## License
 
