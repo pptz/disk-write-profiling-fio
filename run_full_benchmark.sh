@@ -160,7 +160,7 @@ setup_ramdisk() {
                 
                 # 2. newfs requires the raw device path (/dev/ramdisk/...)
                 RAW_RAMDISK=$(echo "$RAMDISK" | sed 's|/dev/ramdisk|/dev/ramdisk|')
-                as_root newfs "$RAW_RAMDISK"
+                echo y | as_root newfs "$RAW_RAMDISK"
                 
                 # 3. Must use -o nologging to prevent journal space exhaustion
                 as_root mount -F ufs -o nologging "$RAMDISK" "$RAMDIR"
@@ -239,6 +239,8 @@ setup_nfs_server() {
 # ------------------------------------------------
 
 mount_nfs() {
+    # Skip NFS entirely for SunOS right now
+    [ "$OS" = "SunOS" ] && return 0
 
     echo "Mounting loopback NFS..."
 

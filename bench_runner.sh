@@ -41,8 +41,10 @@ fi
 # ------------------------------------------------
 purge_cache() {
     if [ "$OS" = "Darwin" ]; then
-        sync && purge 2>/dev/null || true
-        # purge cannot evict RAM-backed ramdisk pages — remount to force eviction
+        sync
+        if ! purge 2>/dev/null; then
+            as_root purge 2>/dev/null || true
+        fi
         if mount | grep -q " on $RAMDIR "; then
             DEV=$(mount | awk -v p="$RAMDIR" '$0 ~ p {print $1}')
             as_root umount "$RAMDIR" 2>/dev/null \
@@ -50,20 +52,17 @@ purge_cache() {
         fi
     elif [ "$OS" = "Linux" ]; then
         sync && echo 3 > /proc/sys/vm/drop_caches 2>/dev/null || true
-        # Also remount the ramdisk to guarantee cold cache for RAM paths
         if mount | grep -q " $RAMDIR "; then
             DEV=$(mount | awk -v p="$RAMDIR" '$3==p {print $1}')
             as_root umount "$RAMDIR" 2>/dev/null \
                 && as_root mount "$DEV" "$RAMDIR" 2>/dev/null || true
         fi
-    fi
     elif [ "$OS" = "SunOS" ]; then
         sync
         if mount | grep -q "$RAMDIR"; then
-            # On SunOS, `mount` output format is: /mountpoint on /dev/device ...
             DEV=$(mount | awk -v p="$RAMDIR" '$1 == p {print $3}')
-            [ -z "$DEV" ] && DEV="/dev/ramdisk/benchram" # Fallback
-
+            [ -z "$DEV" ] && DEV="/dev/ramdisk/benchram"
+            
             as_root umount "$RAMDIR" 2>/dev/null \
                 && as_root mount -F ufs -o nologging "$DEV" "$RAMDIR" 2>/dev/null || true
         fi
@@ -111,6 +110,12 @@ run_bench_pair() {
     # WRITE
     OUT_W="${TMPDIR:-/tmp}/bench_w.$$"
     ./bench.sh "$FILE" "$SIZE" "$WORKLOAD" "$TOOL" "WRITE" "$TEST_MODE" > "$OUT_W" 2>&1
+    if [ $? -ne 0 ]; then
+        echo -e "\n[!] ERROR: Write test failed. Log output:"
+        cat "$OUT_W"
+        rm -f "$OUT_W"
+        exit 1
+    fi
     THR_W=$(awk '/^Mean throughput:/ {print $3}' "$OUT_W" | tail -n1)
     STD_W=$(awk '/^Stddev:/ {print $2}' "$OUT_W" | tail -n1)
 
@@ -122,6 +127,12 @@ run_bench_pair() {
     # READ
     OUT_R="${TMPDIR:-/tmp}/bench_r.$$"
     ./bench.sh "$FILE" "$SIZE" "$WORKLOAD" "$TOOL" "READ" "$TEST_MODE" > "$OUT_R" 2>&1
+    if [ $? -ne 0 ]; then
+        echo -e "\n[!] ERROR: Read test failed. Log output:"
+        cat "$OUT_R"
+        rm -f "$OUT_W" "$OUT_R"
+        exit 1
+    fi
     THR_R=$(awk '/^Mean throughput:/ {print $3}' "$OUT_R" | tail -n1)
     STD_R=$(awk '/^Stddev:/ {print $2}' "$OUT_R" | tail -n1)
 
