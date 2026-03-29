@@ -13,6 +13,7 @@
 set -euo pipefail
 
 WORKLOAD="${1:-SEQ}"
+TOOL="${2:-fio}"
 OS=$(uname -s)
 
 # ------------------------------------------------
@@ -48,7 +49,9 @@ install_dependencies() {
 
     NEED_INSTALL=()
 
-    command -v fio >/dev/null 2>&1 || NEED_INSTALL+=("fio")
+    if [ "$TOOL" = "fio" ]; then
+        command -v fio >/dev/null 2>&1 || NEED_INSTALL+=("fio")
+    fi
     command -v jq  >/dev/null 2>&1 || NEED_INSTALL+=("jq")
 
     if [ ${#NEED_INSTALL[@]} -eq 0 ]; then
@@ -119,10 +122,12 @@ echo
 # Sanity check
 # ------------------------------------------------
 
-command -v fio >/dev/null 2>&1 || {
-    echo "ERROR: fio not found."
-    exit 1
-}
+if [ "$TOOL" = "fio" ]; then
+    command -v fio >/dev/null 2>&1 || {
+        echo "ERROR: fio not found."
+        exit 1
+    }
+fi
 
 # ------------------------------------------------
 # RAM disk
@@ -262,8 +267,8 @@ mount_nfs() {
 # ------------------------------------------------
 
 run_benchmarks() {
-    echo "Starting benchmark suite ($WORKLOAD)..."
-    ./bench_runner.sh "$RAMDIR" "$DISKDIR" "$NFS_RAM_MNT" "$NFS_DISK_MNT" "$WORKLOAD"
+    echo "Starting benchmark suite ($WORKLOAD) using $TOOL..."
+    ./bench_runner.sh "$RAMDIR" "$DISKDIR" "$NFS_RAM_MNT" "$NFS_DISK_MNT" "$WORKLOAD" "$TOOL"
 }
 
 # ------------------------------------------------
@@ -282,6 +287,13 @@ teardown() {
             as_root sed -i "\|$RAMDIR|d" /etc/exports || true
             as_root sed -i "\|$DISKDIR|d" /etc/exports || true
             as_root exportfs -ra || true
+            ;;
+        Darwin*)
+            # Clean up /etc/exports
+            # Use paths that were actually used
+            as_root sed -i '' "\|$RAMDIR|d" /etc/exports 2>/dev/null || true
+            as_root sed -i '' "\|$DISKDIR|d" /etc/exports 2>/dev/null || true
+            as_root nfsd update || true
             ;;
     esac
 

@@ -6,10 +6,10 @@
 # Runs the full benchmark matrix and prints a summary table
 #
 # Usage:
-#   bench_runner.sh <ramdir> <diskdir> <nfs_ram> <nfs_disk> <workload>
+#   bench_runner.sh <ramdir> <diskdir> <nfs_ram> <nfs_disk> <workload> <tool>
 #
 # Example:
-#   ./bench_runner.sh /tmp/ramdisk /tmp/disk /mnt/nfs_ram /mnt/nfs_disk SEQ
+#   ./bench_runner.sh /tmp/ramdisk /tmp/disk /mnt/nfs_ram /mnt/nfs_disk SEQ fio
 # ===============================================================
 
 set -e
@@ -19,6 +19,7 @@ DISKDIR="$2"
 NFS_RAM="$3"
 NFS_DISK="$4"
 WORKLOAD="${5:-SEQ}"
+TOOL="${6:-fio}"
 
 # Using identical sizes for both SEQ and RAND (1MB block size each)
 # to isolate the Access Pattern variable.
@@ -60,12 +61,22 @@ run_single_test() {
     # Verification: Ensure the path is actually the type of mount we expect.
     case "$LABEL" in
         *NFS*)
-            # Match 'nfs', 'nfs4', 'nfs3' etc. drop -w (whole-word) so
-            # that NFSv4 mounts (type 'nfs4') are not falsely skipped.
-            if ! mount | awk '{print $3, $5}' | grep -E "^$PATHDIR nfs" >/dev/null; then
-                echo "Skipping $LABEL : $SIZE (Path is not an NFS mount: $PATHDIR)"
-                echo "$LABEL ($SIZE): Not an NFS mount ($PATHDIR)" >> "$SKIPPED_FILE"
-                return
+            # On Darwin, mount output looks like:
+            # 127.0.0.1:/path on /mnt/path (nfs, ...)
+            # On Linux, it looks like:
+            # 127.0.0.1:/path on /mnt/path type nfs (rw,...)
+            if [ "$(uname -s)" = "Darwin" ]; then
+                if ! mount | grep -E " on $PATHDIR \(nfs" >/dev/null; then
+                    echo "Skipping $LABEL : $SIZE (Path is not an NFS mount: $PATHDIR)"
+                    echo "$LABEL ($SIZE): Not an NFS mount ($PATHDIR)" >> "$SKIPPED_FILE"
+                    return
+                fi
+            else
+                if ! mount | awk '{print $3, $5}' | grep -E "^$PATHDIR nfs" >/dev/null; then
+                    echo "Skipping $LABEL : $SIZE (Path is not an NFS mount: $PATHDIR)"
+                    echo "$LABEL ($SIZE): Not an NFS mount ($PATHDIR)" >> "$SKIPPED_FILE"
+                    return
+                fi
             fi
             ;;
         RAM_LOCAL)
@@ -92,11 +103,7 @@ printf "Running %-12s [%4s] : %s... " "$LABEL" "$WORKLOAD" "$SIZE"
 
 OUTFILE="${TMPDIR:-/tmp}/bench_run.$$"
 # Run bench.sh and capture stdout/stderr
-./bench.sh "$FILE" "$SIZE" "$WORKLOAD" > "$OUTFILE" 2>&1
-
-# Debug: show last 20 lines of output
-echo "DEBUG: bench.sh output (last 20 lines):"
-tail -n 20 "$OUTFILE"
+./bench.sh "$FILE" "$SIZE" "$WORKLOAD" "$TOOL" > "$OUTFILE" 2>&1
 
 # Parse throughput and stddev
 THROUGHPUT=$(awk '/^Mean throughput:/ {print $3}' "$OUTFILE" | tail -n1)

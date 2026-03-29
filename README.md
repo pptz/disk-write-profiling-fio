@@ -1,6 +1,6 @@
-# Disk Write Profiling with `fio`
+# Disk Write Profiling with `fio` and `dd`
 
-A portable storage benchmarking suite designed to measure and compare write throughput across various storage layers and configurations. This tool is particularly useful for identifying bottlenecks in local disk subsystems versus network-attached storage (NFS). 
+A portable storage benchmarking suite designed to measure and compare write throughput across various storage layers and configurations. This tool is particularly useful for identifying bottlenecks in local disk subsystems versus network-attached storage (NFS).
 
 ## Overview
 
@@ -10,7 +10,7 @@ The suite automates the setup, execution, and analysis of write benchmarks acros
 - **NFS-mounted RAM Disk**: Isolates the performance impact of the NFS protocol by using a high-speed memory backend.
 - **NFS-mounted Disk**: Measures the end-to-end performance of network-attached storage.
 
-Supports both **Sequential** and **Random** write workloads.
+Supports both **Sequential** and **Random** write workloads using either **fio** or **dd**.
 
 By comparing these results, the suite calculates performance factors to help determine if bottlenecks lie within the disk subsystem or the network protocol itself.
 
@@ -24,38 +24,52 @@ By comparing these results, the suite calculates performance factors to help det
 ## Prerequisites
 
 - **bash**: The scripts are written for the Bash shell.
-- **fio**: The Flexible I/O Tester is the core benchmarking engine.
+- **fio** (Optional): The Flexible I/O Tester. Required if choosing `fio` as the benchmark tool.
+- **dd**: Available on all Unix-like systems. Used as an alternative to `fio`.
 - **jq**: Used for parsing JSON output from `fio`.
 - **sudo**: Required for setting up RAM disks and NFS exports.
 
 ## Usage
 
-### High-Level Wrappers
+### Typical Way to Run
 
-The easiest way to run the benchmarks is using the specialized wrappers:
+The recommended way to run the benchmark, ensuring a clean workspace and capturing all output, is:
 
 ```bash
-# Run sequential benchmarks (10MB, 100MB, 1000MB)
-sudo ./run_sequential.sh
+export BASE="$(pwd)/bench_workdir_run1" && sudo -E ./run_sequential.sh fio 2>&1 | tee benchmark_output.txt
+```
 
-# Run random benchmarks (10MB, 100MB, 1000MB)
-sudo ./run_random.sh
+### High-Level Wrappers
+
+The wrappers accept an optional tool argument (`fio` or `dd`):
+
+```bash
+# Run sequential benchmarks (defaulting to fio)
+sudo ./run_sequential.sh [fio|dd]
+
+# Run random benchmarks (defaulting to fio)
+sudo ./run_random.sh [fio|dd]
 ```
 
 ### Automated Orchestrator
 
-The wrappers call the master orchestrator with a workload argument:
+The wrappers call the master orchestrator with workload and tool arguments:
 
 ```bash
-sudo ./run_full_benchmark.sh [SEQ|RAND]
+sudo ./run_full_benchmark.sh [SEQ|RAND] [fio|dd]
 ```
 
 ## Benchmark Configuration
 
 The suite uses **1MB blocks** for both sequential and random workloads to isolate the **Access Pattern** as the primary variable.
 
-*   **Sequential**: Writes data in contiguous blocks (`rw=write`).
-*   **Random**: Writes data to random offsets within the file (`rw=randwrite`).
+*   **Sequential**: Writes data in contiguous blocks.
+*   **Random**: Writes data to random offsets within the file.
+
+### Tool Parity (`fio` vs `dd`)
+To ensure results are comparable:
+- **fio**: Configured with `sync=1` (O_SYNC) and `fsync_on_close=1` to ensure every block is committed to storage.
+- **dd**: Implemented with a loop that performs an `fsync` (or `fdatasync`) after every 1MB block write, preventing OS page cache inflation of results.
 
 ### Statistical Rigor
 Every test point is measured multiple times:
@@ -78,7 +92,7 @@ Every test point is measured multiple times:
 ## Key Observations (macOS)
 
 ### 1. The NFS Bottleneck & Lack of Parallelism
-On macOS, the built-in **`nfsd`** (running **NFSv3**) acts as a rigid throughput ceiling. 
+On macOS, the built-in **`nfsd`** (running **NFSv3**) acts as a rigid throughput ceiling.
 - **The "Steel Ceiling"**: Throughput caps at ~130-160 MB/s regardless of whether the backend is a 10GB/s RAM disk or a 3GB/s SSD.
 - **No Scaling**: Increasing parallelism (`numjobs=4`) does **not** increase NFS throughput; in fact, it often causes a slight drop due to lock contention in the kernel's NFS stack. This suggests that macOS NFS is effectively non-parallel for local loopback workloads.
 
