@@ -33,8 +33,18 @@ purge_cache() {
         if ! purge 2>/dev/null; then
             sudo purge 2>/dev/null || echo "WARNING: purge failed — read results may reflect cache" >&2
         fi
+        if mount | grep -q " on $RAMDIR "; then
+            DEV=$(mount | awk -v p="$RAMDIR" '$0 ~ p {print $1}')
+            as_root umount "$RAMDIR" 2>/dev/null \
+                && as_root mount -t hfs "$DEV" "$RAMDIR" 2>/dev/null || true
+        fi
     elif [ "$OS" = "Linux" ]; then
         sync && echo 3 > /proc/sys/vm/drop_caches 2>/dev/null || true
+        if mount | grep -q " $RAMDIR "; then
+            DEV=$(mount | awk -v p="$RAMDIR" '$3==p {print $1}')
+            as_root umount "$RAMDIR" 2>/dev/null \
+                && as_root mount "$DEV" "$RAMDIR" 2>/dev/null || true
+        fi
     fi
 }
 

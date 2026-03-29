@@ -102,8 +102,8 @@ install_dependencies() {
 # Paths
 # ------------------------------------------------
 
-BASE="${BASE:-${TMPDIR:-/tmp}/storage_bench}"
-RAMDIR="$BASE/ramdisk"
+export BASE="${BASE:-${TMPDIR:-/tmp}/storage_bench}"
+export RAMDIR="$BASE/ramdisk"
 DISKDIR="$BASE/disk"
 NFS_RAM_MNT="$BASE/nfs_ram"
 NFS_DISK_MNT="$BASE/nfs_disk"
@@ -138,7 +138,7 @@ setup_ramdisk() {
             mkdir -p "$RAMDIR"
             if ! mountpoint -q "$RAMDIR"; then
                 as_root modprobe brd rd_nr=1 rd_size=2097152
-                as_root mkfs.ext4 /dev/ram0
+                as_root mkfs.ext2 /dev/ram0
                 as_root mount /dev/ram0 "$RAMDIR"
             fi
             ;;

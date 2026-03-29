@@ -50,6 +50,12 @@ purge_cache() {
         fi
     elif [ "$OS" = "Linux" ]; then
         sync && echo 3 > /proc/sys/vm/drop_caches 2>/dev/null || true
+        # Also remount the ramdisk to guarantee cold cache for RAM paths
+        if mount | grep -q " $RAMDIR "; then
+            DEV=$(mount | awk -v p="$RAMDIR" '$3==p {print $1}')
+            as_root umount "$RAMDIR" 2>/dev/null \
+                && as_root mount "$DEV" "$RAMDIR" 2>/dev/null || true
+        fi
     fi
 }
 
