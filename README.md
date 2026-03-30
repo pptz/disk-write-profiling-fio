@@ -19,7 +19,7 @@ By comparing these results, the suite calculates performance factors to help det
 - **macOS** (Darwin / Apple Silicon): tested on Sonoma 14.6.1
 - **Linux** (various distributions): tested on Debian 13
 - **FreeBSD**: not tested yet
-- **OmniOS / illumos** (SunOS): not tested yet
+- **OmniOS / illumos** (SunOS): tested on OmniOS r151052
 
 ## Prerequisites
 
@@ -79,8 +79,9 @@ Every test point is measured multiple times (unless `test` mode is used):
 
 | Machine                    | OS                              | RAM Local (W/R) [MB/s] | Disk Local (W/R) [MB/s] | RAM NFS (W/R) [MB/s] | Disk NFS (W/R) [MB/s] |
 | :------------------------- | :-----------------------------: | :--------------------: | :---------------------: | :------------------: | :-------------------: |
-| MacBook Air M1             | Darwin (23.6.0)                 |     5220 / 5951        |      1225 / 2935        |      929 / 355       |       563 / 218       |
-| Dell (i5-11300H) (VM)      | Linux (6.12.74+deb13+1-amd64)   |     1647 / 3273        |      1926 / 3129        |      815 / 1428      |       697 / 1218      |
+| MacBook Air M1             | Darwin (23.6.0)                 |     4900 / 5200        |      1225 / 2470        |      970 / 365       |       485 / 190       |
+| Dell (i5-11300H) (VM)      | Linux (6.12.74+deb13+1-amd64)   |     1040 / 3150        |      1860 / 2890        |      815 / 1428      |       697 / 1218      |
+| Dell (i5-11300H) (VM)      | OmniOS (r151052)                |      433 / 418         |      3280 / 7264        |      N/A / N/A       |       N/A / N/A       |
 
 ## License
 

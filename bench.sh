@@ -25,6 +25,29 @@ fi
 AWK_BIN="awk"
 [ "$OS" = "SunOS" ] && AWK_BIN="nawk"
 
+# ------------------------------------------------
+# Privilege handling
+# ------------------------------------------------
+
+is_root() {
+    [ "$(id -u)" -eq 0 ]
+}
+
+have_sudo() {
+    command -v sudo >/dev/null 2>&1 && sudo -n true 2>/dev/null
+}
+
+as_root() {
+    if is_root; then
+        "$@"
+    elif have_sudo; then
+        sudo "$@"
+    else
+        echo "ERROR: This operation requires root privileges: $*" >&2
+        exit 1
+    fi
+}
+
 # Portable lowercase for MODE
 MODE_LOWER=$(echo "$MODE" | tr '[:upper:]' '[:lower:]')
 
@@ -32,22 +55,30 @@ MODE_LOWER=$(echo "$MODE" | tr '[:upper:]' '[:lower:]')
 # purge_cache (Internal)
 # ------------------------------------------------
 purge_cache() {
+    local TARGET_PATH="$1"
     if [ "$OS" = "Darwin" ]; then
         sync
         if ! purge 2>/dev/null; then
-            sudo purge 2>/dev/null || true
+            as_root purge 2>/dev/null || true
         fi
-        if mount | grep -q " on $RAMDIR "; then
-            DEV=$(mount | awk -v p="$RAMDIR" '$0 ~ p {print $1}')
-            sudo umount "$RAMDIR" 2>/dev/null \
-                && sudo mount -t hfs "$DEV" "$RAMDIR" 2>/dev/null || true
+        # Only remount if NOT an NFS path and RAMDIR is set
+        if [[ "$TARGET_PATH" != *"nfs_"* ]] && [ -n "$RAMDIR" ] && mount | grep -q " on $RAMDIR "; then
+            # Match exact mount point to avoid confusion with NFS sources
+            DEV=$(mount | awk -v p="$RAMDIR" '$3 == p {print $1}')
+            if [ -n "$DEV" ]; then
+                as_root umount "$RAMDIR" 2>/dev/null \
+                    && as_root mount -t hfs "$DEV" "$RAMDIR" 2>/dev/null || true
+            fi
         fi
     elif [ "$OS" = "Linux" ]; then
         sync && echo 3 > /proc/sys/vm/drop_caches 2>/dev/null || true
-        if mount | grep -q " $RAMDIR "; then
+        # Only remount if NOT an NFS path and RAMDIR is set
+        if [[ "$TARGET_PATH" != *"nfs_"* ]] && [ -n "$RAMDIR" ] && mount | grep -q " $RAMDIR "; then
             DEV=$(mount | awk -v p="$RAMDIR" '$3==p {print $1}')
-            sudo umount "$RAMDIR" 2>/dev/null \
-                && sudo mount "$DEV" "$RAMDIR" 2>/dev/null || true
+            if [ -n "$DEV" ]; then
+                as_root umount "$RAMDIR" 2>/dev/null \
+                    && as_root mount "$DEV" "$RAMDIR" 2>/dev/null || true
+            fi
         fi
     elif [ "$OS" = "SunOS" ]; then
         sync
@@ -88,7 +119,7 @@ for i in $(seq 1 $RUNS); do
     if [ "$MODE" = "WRITE" ]; then
         rm -f "$TARGET_FILE"
     else
-        purge_cache
+        purge_cache "$TARGET_FILE"
     fi
 
     if [ "$TOOL" = "fio" ]; then
