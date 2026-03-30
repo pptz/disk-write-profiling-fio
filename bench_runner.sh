@@ -128,6 +128,10 @@ run_bench_pair() {
 
     # NFS check
     if [[ "$LABEL" == *"NFS"* ]]; then
+        echo "DEBUG: Checking for NFS mount at $PATHDIR (OS: $OS)"
+        # Show what mount sees for this path
+        mount | grep "$PATHDIR" || echo "DEBUG: $PATHDIR not found in mount output"
+        
         # More robust and portable check for NFS mount:
         # 1. Must contain " on $PATHDIR "
         # 2. Must contain "nfs" (case-insensitive for portability)

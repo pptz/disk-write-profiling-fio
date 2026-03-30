@@ -77,6 +77,13 @@ Every test point is measured multiple times (unless `test` mode is used):
 
 ## Benchmarked Results
 
+Based on the 750MB run of dd.
+Sample commands:
+```
+dd if=/dev/zero of="test_file.dat" bs=1M count=750 conv=fsync status=none
+dd if="test_file.dat" of=/dev/null bs=1M count=750 status=none
+```
+
 | Machine                    | OS                              | RAM Local (W/R) [MB/s] | Disk Local (W/R) [MB/s] | RAM NFS (W/R) [MB/s] | Disk NFS (W/R) [MB/s] |
 | :------------------------- | :-----------------------------: | :--------------------: | :---------------------: | :------------------: | :-------------------: |
 | MacBook Air M1             | Darwin (23.6.0)                 |     4900 / 5200        |      1225 / 2470        |      970 / 365       |       485 / 190       |
