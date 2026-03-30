@@ -16,8 +16,8 @@ WORKLOAD="${5:-SEQ}"
 TOOL="${6:-fio}"
 TEST_MODE="${7:-}"
 
-SIZES=("10M" "100M" "1000M")
-ANALYSIS_SIZE="1000M"
+SIZES=("10M" "100M" "750M")
+ANALYSIS_SIZE="750M"
 
 RESULTS_FILE="${TMPDIR:-/tmp}/bench_results.$$"
 SKIPPED_FILE="${TMPDIR:-/tmp}/skipped_tests.$$"
@@ -55,6 +55,17 @@ purge_cache() {
             DEV=$(mount | awk -v p="$RAMDIR" '$3==p {print $1}')
             as_root umount "$RAMDIR" 2>/dev/null \
                 && as_root mount "$DEV" "$RAMDIR" 2>/dev/null || true
+        fi
+    fi
+    elif [ "$OS" = "SunOS" ]; then
+        sync
+        if mount | grep -q "$RAMDIR"; then
+            # On SunOS, `mount` output format is: /mountpoint on /dev/device ...
+            DEV=$(mount | awk -v p="$RAMDIR" '$1 == p {print $3}')
+            [ -z "$DEV" ] && DEV="/dev/ramdisk/benchram" # Fallback
+
+            as_root umount "$RAMDIR" 2>/dev/null \
+                && as_root mount -F ufs -o nologging "$DEV" "$RAMDIR" 2>/dev/null || true
         fi
     fi
 }

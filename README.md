@@ -72,7 +72,7 @@ To ensure results are comparable:
 ### Statistical Rigor
 Every test point is measured multiple times (unless `test` mode is used):
 1. **Warmup Run**: Discarded to account for filesystem metadata allocation and cache warmup.
-2. **Measured Runs**: 8 runs for small sizes, 5 runs for 1000MB.
+2. **Measured Runs**: 8 runs for small sizes, 5 runs for 750MB.
 3. **Trimmed Mean**: The best and worst results are discarded, and the final result is calculated from the remaining runs to provide a stable average.
 
 ## Benchmarked Results

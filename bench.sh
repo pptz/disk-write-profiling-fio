@@ -46,6 +46,17 @@ purge_cache() {
                 && as_root mount "$DEV" "$RAMDIR" 2>/dev/null || true
         fi
     fi
+    elif [ "$OS" = "SunOS" ]; then
+        sync
+        if mount | grep -q "$RAMDIR"; then
+            # On SunOS, `mount` output format is: /mountpoint on /dev/device ...
+            DEV=$(mount | awk -v p="$RAMDIR" '$1 == p {print $3}')
+            [ -z "$DEV" ] && DEV="/dev/ramdisk/benchram" # Fallback
+
+            as_root umount "$RAMDIR" 2>/dev/null \
+                && as_root mount -F ufs -o nologging "$DEV" "$RAMDIR" 2>/dev/null || true
+        fi
+    fi
 }
 
 RUNS=9
@@ -54,7 +65,7 @@ WARMUP=1
 if [ "$TEST_MODE" = "test" ]; then
     RUNS=2
     WARMUP=1
-elif [ "$SIZE_STR" = "1000M" ]; then
+elif [ "$SIZE_STR" = "750M" ]; then
     RUNS=6
 fi
 
@@ -115,35 +126,48 @@ for i in $(seq 1 $RUNS); do
     else
         # dd implementation
         T_START=$(perl -MTime::HiRes=time -e 'print time' 2>/dev/null || date +%s)
-        
+
         if [ "$MODE" = "WRITE" ]; then
             if [ "$WORKLOAD" = "SEQ" ]; then
-                dd if=/dev/zero of="$TARGET_FILE" bs=1M count=$COUNT conv=fsync status=none 2>/dev/null
+                if [ "$OS" = "SunOS" ]; then
+                    dd if=/dev/zero of="$TARGET_FILE" bs=1048576 count=$COUNT 2>/dev/null
+                    sync
+                else
+                    dd if=/dev/zero of="$TARGET_FILE" bs=1M count=$COUNT conv=fsync status=none 2>/dev/null
+                fi
             else
                 touch "$TARGET_FILE"
                 for (( j=0; j<COUNT; j++ )); do
                     OFFSET=$(( RANDOM % COUNT ))
-                    dd if=/dev/zero of="$TARGET_FILE" bs=1M count=1 seek=$OFFSET conv=notrunc status=none 2>/dev/null
+                    if [ "$OS" = "SunOS" ]; then
+                        dd if=/dev/zero of="$TARGET_FILE" bs=1048576 count=1 seek=$OFFSET conv=notrunc 2>/dev/null
+                    else
+                        dd if=/dev/zero of="$TARGET_FILE" bs=1M count=1 seek=$OFFSET conv=notrunc status=none 2>/dev/null
+                    fi
                 done
-                dd if=/dev/null of="$TARGET_FILE" conv=notrunc,fsync status=none 2>/dev/null
+                if [ "$OS" = "SunOS" ]; then
+                    sync
+                else
+                    dd if=/dev/null of="$TARGET_FILE" conv=notrunc,fsync status=none 2>/dev/null
+                fi
             fi
         else
             if [ "$WORKLOAD" = "SEQ" ]; then
-                dd if="$TARGET_FILE" of=/dev/null bs=1M count=$COUNT status=none 2>/dev/null
+                if [ "$OS" = "SunOS" ]; then
+                    dd if="$TARGET_FILE" of=/dev/null bs=1048576 count=$COUNT 2>/dev/null
+                else
+                    dd if="$TARGET_FILE" of=/dev/null bs=1M count=$COUNT status=none 2>/dev/null
+                fi
             else
                 for (( j=0; j<COUNT; j++ )); do
                     OFFSET=$(( RANDOM % COUNT ))
-                    dd if="$TARGET_FILE" of=/dev/null bs=1M count=1 skip=$OFFSET status=none 2>/dev/null
+                    if [ "$OS" = "SunOS" ]; then
+                        dd if="$TARGET_FILE" of=/dev/null bs=1048576 count=1 skip=$OFFSET 2>/dev/null
+                    else
+                        dd if="$TARGET_FILE" of=/dev/null bs=1M count=1 skip=$OFFSET status=none 2>/dev/null
+                    fi
                 done
             fi
-        fi
-
-        T_END=$(perl -MTime::HiRes=time -e 'print time' 2>/dev/null || date +%s)
-        DURATION=$(awk -v start="$T_START" -v end="$T_END" 'BEGIN {print end - start}')
-        if (( $(awk -v d="$DURATION" 'BEGIN {print (d > 0.001)}') )); then
-            MBPS=$(awk -v size="$COUNT" -v duration="$DURATION" 'BEGIN {printf "%.2f", size/duration}')
-        else
-            MBPS="0.00"
         fi
     fi
 

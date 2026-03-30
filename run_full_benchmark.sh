@@ -155,9 +155,15 @@ setup_ramdisk() {
         SunOS*)
             mkdir -p "$RAMDIR"
             if ! mount | grep -q "$RAMDIR"; then
-                RAMDISK=$(as_root ramdiskadm -a benchram 2048m)
-                as_root newfs "$RAMDISK"
-                as_root mount "$RAMDISK" "$RAMDIR"
+                # Create 900MB ramdisk (max contiguous swap allocation I could achieve)
+                RAMDISK=$(as_root ramdiskadm -a benchram 943718400)
+                
+                # 2. newfs requires the raw device path (/dev/ramdisk/...)
+                RAW_RAMDISK=$(echo "$RAMDISK" | sed 's|/dev/ramdisk|/dev/ramdisk|')
+                as_root newfs "$RAW_RAMDISK"
+                
+                # 3. Must use -o nologging to prevent journal space exhaustion
+                as_root mount -F ufs -o nologging "$RAMDISK" "$RAMDIR"
             fi
             ;;
 
@@ -291,7 +297,14 @@ teardown() {
     esac
 
     as_root umount "$RAMDIR" 2>/dev/null || true
-    as_root rmmod brd 2>/dev/null || true
+    case "$OS" in
+        Linux*)
+            as_root rmmod brd 2>/dev/null || true
+            ;;
+        SunOS*)
+            as_root ramdiskadm -d benchram 2>/dev/null || true
+            ;;
+    esac
     as_root rm -rf "$BASE"
 
     echo "Teardown complete."
