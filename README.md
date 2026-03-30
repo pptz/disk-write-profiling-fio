@@ -1,4 +1,4 @@
-# Disk Write Profiling with `fio` and `dd`
+# Storage Performance Profiling with `fio` and `dd`
 
 A portable storage benchmarking suite designed to measure and compare write throughput across various storage layers and configurations. This tool is particularly useful for identifying bottlenecks in local disk subsystems versus network-attached storage (NFS).
 
@@ -98,22 +98,22 @@ dd if="test_file.dat" of=/dev/null bs=1M count=750 status=none
    * The Bottleneck: The RAM disk was created using the legacy ramdiskadm driver and UFS. This driver is often single-threaded or constrained by older kernel code paths.
    * Conclusion: On illumos, ZFS is a better "RAM disk" than an actual RAM disk. The 5.5 GB/s read speed proves you are reading directly from the ARC (RAM), not physical storage.
 
-2. Read vs. Write: The "Read-Ahead" Advantage
+2. Read vs. Write: The "Read-Ahead" Advantage:
    In almost every local test, Read is significantly faster than Write.
-   * Write Overhead: Even with optimizations, writes require metadata updates (updating the journal or ZFS Uberblock), space allocation, and "blocking" calls to ensure the data is persisted.
+   * Write Overhead: Even with optimizations, writes require metadata updates (updating the journal or ZFS Uberblock), space allocation, and blocking calls to ensure the data is persisted.
    * Read Optimization: Modern kernels use Read-Ahead. When they detect a sequential read (like dd or fio do), the OS pre-fetches the next several megabytes into cache before the application even asks for
      them. This hides the latency of the storage media.
 
 3. MacBook Air M1 Performance:
-   The MacBook's RAM Local performance (~5.2 GB/s) is incredibly high.
+   The MacBook's RAM Local performance (~5 GB/s) is incredibly high.
    * Unified Memory Architecture: On Apple Silicon, the CPU and GPU share the same memory pool with extremely wide, high-bandwidth buses. The macOS hdiutil ramdisk is highly optimized to leverage this,
      resulting in throughput that nears the theoretical limits of the memory hardware.
-   * The NFS "Tax": Notice the drop on the Mac from 5220 MB/s (Local) to 929 MB/s (NFS). This represents the "Network Protocol Tax"—the overhead of the TCP/IP stack, context switching between the
-     application and the nfsd daemon, and the NFSv3 protocol's own management overhead.
+   * The NFS "Tax": Notice the drop on the Mac from 5200 MB/s (Local) to 970 MB/s and less (NFS, local). This represents the overhead of the TCP/IP stack, context switching between the
+     application and the nfsd daemon, and the NFSv3 protocol's management overhead.
 
 4. Linux VM: The "Host Cache" Effect
-   On the Linux VM, the Local Disk (1926 MB/s) actually outperformed the Guest's RAM Disk (1647 MB/s).
-   * Double Caching: In a Virtual Machine, the "Local Disk" is usually just a file on the Host OS. Even if the cache is cleared/flushed inside the Linux VM (using drop_caches), the Host OS (Windows)
+   On the Linux VM, the Local Disk (~2 GB/s) outperformed the Guest's RAM Disk (~1 GB/s) for Writes.
+   * Double Caching: In a Virtual Machine, the "Local Disk" is likely just a file on the Host OS. Even if the cache is cleared/flushed inside the Linux VM (using drop_caches), the Host OS (Windows)
      likely still has that file in its RAM.
    * Result: We are not benchmarking the guest's disk, we are benchmarking the host's RAM speed through the hypervisor's virtio-blk driver.
 
