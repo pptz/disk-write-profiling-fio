@@ -128,11 +128,11 @@ run_bench_pair() {
 
     # NFS check
     if [[ "$LABEL" == *"NFS"* ]]; then
-        if [ "$OS" = "Darwin" ]; then
-            mount | grep -E " on $PATHDIR \(nfs" >/dev/null || { echo "Skipping $LABEL: Not NFS"; return; }
-        else
-            mount | awk '{print $3, $5}' | grep -E "^$PATHDIR nfs" >/dev/null || { echo "Skipping $LABEL: Not NFS"; return; }
-        fi
+        # More robust and portable check for NFS mount:
+        # 1. Must contain " on $PATHDIR "
+        # 2. Must contain "nfs" (case-insensitive for portability)
+        # 3. Handle both Linux "type nfs" and Darwin "(nfs, ...)" formats
+        mount | grep " on $PATHDIR " | grep -Ei "nfs|type nfs" >/dev/null || { echo "Skipping $LABEL: Not NFS"; return; }
     fi
 
     FILE="$PATHDIR/test_${SIZE}.dat"
