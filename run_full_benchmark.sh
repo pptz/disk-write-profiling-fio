@@ -137,7 +137,7 @@ setup_ramdisk() {
         Linux*)
             mkdir -p "$RAMDIR"
             if ! mountpoint -q "$RAMDIR"; then
-                as_root modprobe brd rd_nr=1 rd_size=2097152
+                as_root modprobe brd rd_nr=1 rd_size=921600
                 as_root mkfs.ext2 /dev/ram0
                 as_root mount /dev/ram0 "$RAMDIR"
             fi
