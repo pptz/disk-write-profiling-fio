@@ -117,6 +117,22 @@ Below are typical results for a run of dd with 750MB of data on a 900MB-sized di
    There is a notable contrast between Linux (930/1700 MB/s) and OmniOS (433/418 MB/s).
    * Efficiency: The Linux `brd` driver and the lightweight `ext2` filesystem (no journaling) are highly optimized for throughput. 
    * Optimization: Linux exhibits a 2x "Read-Ahead" gain, while OmniOS remains symmetric (~420 MB/s). This indicates that the legacy `ramdiskadm` / `UFS` stack on OmniOS lacks modern pre-fetching optimizations and is bottlenecked by legacy metadata synchronization.
+   * Comparing the OminOS ramdisk implementation at https://github.com/illumos/illumos-gate/blob/34d47eb96ec559930e429576998bd0b4ebd85ffa/usr/src/uts/common/io/ramdisk.c
+     and the Linux implementation at https://github.com/torvalds/linux/blob/master/drivers/block/brd.c
+     Shows that the OmniOS code does, roughly this for every 4KB block:
+     - Lock Mutex
+     - Call HAT (Page Table Change)
+     - TLB Flush (IPI to other cores)
+     - bcopy (The actual work)
+     - Unlock Mutex
+     - Repeat for next 4KB (page size)
+
+     Whereas Linux is far more efficient:
+     - Read-Copy-Update protected XArray lookup (lockless read, lockless write within a given page)
+     - memcpy (The actual work)
+
+     Overall, Linux uses the page cache / XArray as its backing store, so the data is already in the kernel's normal page management infrastructure. There's no special mapping step needed at I/O time — the pages are always reachable.
+     The OmniOS HAT procedure is needed because its ramdisk maps/unmaps pages into a temporary kernel VA single-page sliding window to perform each copy. This is the root cause of the per-page overhead.
 
 ## License
 
