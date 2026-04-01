@@ -77,17 +77,13 @@ Every test point is measured multiple times (unless `test` mode is used):
 
 ## Benchmarked Results
 
-Based on the 750MB run of dd.
-Sample commands:
-```
-dd if=/dev/zero of="test_file.dat" bs=1M count=750 conv=fsync status=none
-dd if="test_file.dat" of=/dev/null bs=1M count=750 status=none
-```
+Below are typical results for a run of dd with 750MB of data on a 900MB-sized disk (this value is used because I encountered difficulties creating a larger ramdisk on OmniOS).
+
 
 | Machine                    | OS                              | RAM Local (W/R) [MB/s] | Disk Local (W/R) [MB/s] | RAM NFS (W/R) [MB/s] | Disk NFS (W/R) [MB/s] |
 | :------------------------- | :-----------------------------: | :--------------------: | :---------------------: | :------------------: | :-------------------: |
 | MacBook Air M1             | Darwin (23.6.0)                 |     4900 / 5200        |      1225 / 2470        |      970 / 365       |       485 / 190       |
-| Dell (i5-11300H) (VM)      | Linux (6.12.74+deb13+1-amd64)   |     1040 / 3150        |      1860 / 2890        |      815 / 1428      |       697 / 1218      |
+| Dell (i5-11300H) (VM)      | Linux (6.12.74+deb13+1-amd64)   |      930 / 1700        |      960  / 1465        |      660 / 1175      |       685 / 755       |
 | Dell (i5-11300H) (VM)      | OmniOS (r151052)                |      433 / 418         |      3280 / 7264        |      N/A / N/A       |       N/A / N/A       |
 
 ### Discussion
@@ -96,11 +92,11 @@ dd if="test_file.dat" of=/dev/null bs=1M count=750 status=none
    * ZFS ARC vs. Legacy Ramdisk: OmniOS uses ZFS. ZFS uses the ARC (Adaptive Replacement Cache), which effectively treats almost all available system RAM as a high-speed cache.
      Writing to a ZFS "disk" means writing to an extremely optimized in-memory transaction group.
    * The Bottleneck: The RAM disk was created using the legacy ramdiskadm driver and UFS. This driver is often single-threaded or constrained by older kernel code paths.
-   * Conclusion: On illumos, ZFS is a better "RAM disk" than an actual RAM disk. The 5.5 GB/s read speed proves you are reading directly from the ARC (RAM), not physical storage.
+   * Conclusion: On illumos, ZFS is a better "RAM disk" than an actual RAM disk. The ~7 GB/s read speed proves we are reading directly from the ARC (RAM), not physical storage.
 
 2. Read vs. Write: The "Read-Ahead" Advantage:
-   In almost every local test, Read is significantly faster than Write.
-   * Write Overhead: Even with optimizations, writes require metadata updates (updating the journal or ZFS Uberblock), space allocation, and blocking calls to ensure the data is persisted.
+   In nearly all local tests, Read is significantly faster than Write.
+   * Write Overhead: Even with optimizations, writes require metadata updates (e.g. ZFS Uberblock), space allocation, and blocking calls to ensure the data is persisted.
    * Read Optimization: Modern kernels use Read-Ahead. When they detect a sequential read (like dd or fio do), the OS pre-fetches the next several megabytes into cache before the application even asks for
      them. This hides the latency of the storage media.
 
@@ -111,11 +107,16 @@ dd if="test_file.dat" of=/dev/null bs=1M count=750 status=none
    * The NFS "Tax": Notice the drop on the Mac from 5200 MB/s (Local) to 970 MB/s and less (NFS, local). This represents the overhead of the TCP/IP stack, context switching between the
      application and the nfsd daemon, and the NFSv3 protocol's management overhead.
 
-4. Linux VM: The "Host Cache" Effect
+4. Linux VM "Disk": The "Host Cache" Effect
    On the Linux VM, the Local Disk (~2 GB/s) outperformed the Guest's RAM Disk (~1 GB/s) for Writes.
    * Double Caching: In a Virtual Machine, the "Local Disk" is likely just a file on the Host OS. Even if the cache is cleared/flushed inside the Linux VM (using drop_caches), the Host OS (Windows)
      likely still has that file in its RAM.
    * Result: We are not benchmarking the guest's disk, we are benchmarking the host's RAM speed through the hypervisor's virtio-blk driver.
+
+5. RAM Disk Performance: Linux vs. OmniOS
+   There is a notable contrast between Linux (930/1700 MB/s) and OmniOS (433/418 MB/s).
+   * Efficiency: The Linux `brd` driver and the lightweight `ext2` filesystem (no journaling) are highly optimized for throughput. 
+   * Optimization: Linux exhibits a 2x "Read-Ahead" gain, while OmniOS remains symmetric (~420 MB/s). This indicates that the legacy `ramdiskadm` / `UFS` stack on OmniOS lacks modern pre-fetching optimizations and is bottlenecked by legacy metadata synchronization.
 
 ## License
 
